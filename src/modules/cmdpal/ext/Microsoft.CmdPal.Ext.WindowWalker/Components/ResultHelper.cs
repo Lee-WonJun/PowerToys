@@ -1,13 +1,17 @@
-﻿// Copyright (c) Microsoft Corporation
+// Copyright (c) Microsoft Corporation
 // The Microsoft Corporation licenses this file to you under the MIT license.
 // See the LICENSE file in the project root for more information.
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using Microsoft.CmdPal.Ext.WindowWalker.Commands;
 using Microsoft.CmdPal.Ext.WindowWalker.Helpers;
 using Microsoft.CmdPal.Ext.WindowWalker.Properties;
+using Microsoft.CommandPalette.Extensions;
 using Microsoft.CommandPalette.Extensions.Toolkit;
+using Windows.Storage.Streams;
 
 namespace Microsoft.CmdPal.Ext.WindowWalker.Components;
 
@@ -60,10 +64,40 @@ internal static class ResultHelper
             Title = searchResult.Result.Title,
             Subtitle = GetSubtitle(searchResult.Result),
             Tags = GetTags(searchResult.Result),
+            Icon = GetIconForWindow(searchResult.Result),
         };
         item.MoreCommands = ContextMenuHelper.GetContextMenuResults(item).ToArray();
 
         return item;
+    }
+
+    private static IIconInfo? GetIconForWindow(Window window)
+    {
+        try
+        {
+            var icon = window.GetWindowIcon();
+            if (icon != null)
+            {
+                using var bitmap = icon.ToBitmap();
+                using var memStream = new MemoryStream();
+                bitmap.Save(memStream, System.Drawing.Imaging.ImageFormat.Png);
+
+                var raStream = new InMemoryRandomAccessStream();
+                using var outputStream = raStream.GetOutputStreamAt(0);
+                using var dataWriter = new DataWriter(outputStream);
+                dataWriter.WriteBytes(memStream.ToArray());
+                dataWriter.StoreAsync().AsTask().Wait();
+                dataWriter.FlushAsync().AsTask().Wait();
+
+                return IconInfo.FromStream(raStream);
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Failed to get icon: {ex.Message}");
+        }
+
+        return null;
     }
 
     /// <summary>
